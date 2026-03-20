@@ -7,9 +7,10 @@ use crate::{
     json,
     lua_ast::{Expression, Statement},
     snapshot::{InstanceContext, InstanceMetadata, InstanceSnapshot},
+    snapshot_middleware::dir::snapshot_dir_no_meta,
 };
 
-use super::meta_file::AdjacentMetadata;
+use super::meta_file::{AdjacentMetadata, DirectoryMetadata};
 
 pub fn snapshot_json(
     context: &InstanceContext,
@@ -39,6 +40,39 @@ pub fn snapshot_json(
     AdjacentMetadata::read_and_apply_all(vfs, path, name, &mut snapshot)?;
 
     Ok(Some(snapshot))
+}
+
+pub fn snapshot_json_init(
+    context: &InstanceContext,
+    vfs: &Vfs,
+    init_path: &Path,
+    name: &str,
+) -> anyhow::Result<Option<InstanceSnapshot>> {
+    let folder_path = init_path.parent().unwrap();
+    let dir_snapshot = snapshot_dir_no_meta(context, vfs, folder_path, name)?.unwrap();
+
+    if dir_snapshot.class_name != "Folder" {
+        anyhow::bail!(
+            "init.json can \
+             only be used if the instance produced by the containing \
+             directory would be a Folder.\n\
+             \n\
+             The directory {} turned into an instance of class {}.",
+            folder_path.display(),
+            dir_snapshot.class_name
+        );
+    }
+
+    let mut init_snapshot = snapshot_json(context, vfs, init_path, &dir_snapshot.name)?.unwrap();
+
+    init_snapshot.children = dir_snapshot.children;
+    init_snapshot.metadata = dir_snapshot.metadata;
+    // The directory snapshot middleware includes all possible init paths
+    // so we don't need to add it here.
+
+    DirectoryMetadata::read_and_apply_all(vfs, folder_path, &mut init_snapshot)?;
+
+    Ok(Some(init_snapshot))
 }
 
 fn json_to_lua(value: serde_json::Value) -> Statement {

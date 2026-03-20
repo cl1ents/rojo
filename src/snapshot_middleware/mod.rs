@@ -41,7 +41,7 @@ use crate::{
 use self::{
     csv::{snapshot_csv, snapshot_csv_init, syncback_csv, syncback_csv_init},
     dir::{snapshot_dir, syncback_dir},
-    json::snapshot_json,
+    json::{snapshot_json, snapshot_json_init},
     json_model::{snapshot_json_model, syncback_json_model},
     lua::{snapshot_lua, snapshot_lua_init, syncback_lua, syncback_lua_init},
     project::{snapshot_project, syncback_project},
@@ -91,7 +91,9 @@ pub fn snapshot_from_vfs(
         // TODO: Is this even necessary anymore?
         match file_name {
             "init.server.luau" | "init.server.lua" | "init.client.luau" | "init.client.lua"
-            | "init.luau" | "init.lua" | "init.csv" => return Ok(None),
+            | "init.luau" | "init.lua" | "init.csv" | "init.json" | "init.jsonc" => {
+                return Ok(None)
+            }
             _ => {}
         }
 
@@ -125,6 +127,8 @@ fn get_dir_middleware<'path>(
             (Middleware::ClientScriptDir, "init.client.luau"),
             (Middleware::ClientScriptDir, "init.client.lua"),
             (Middleware::CsvDir, "init.csv"),
+            (Middleware::JsonDir, "init.json"),
+            (Middleware::JsonDir, "init.jsonc"),
         ]
     });
 
@@ -207,6 +211,8 @@ pub enum Middleware {
     #[serde(skip_deserializing)]
     ModuleScriptDir,
     #[serde(skip_deserializing)]
+    JsonDir,
+    #[serde(skip_deserializing)]
     CsvDir,
 }
 
@@ -258,6 +264,7 @@ impl Middleware {
             Self::ModuleScriptDir => {
                 snapshot_lua_init(context, vfs, path, name, ScriptType::Module)
             }
+            Self::JsonDir => snapshot_json_init(context, vfs, path, name),
             Self::CsvDir => snapshot_csv_init(context, vfs, path, name),
         };
         if let Ok(Some(ref mut snapshot)) = output {
@@ -298,6 +305,7 @@ impl Middleware {
             Middleware::ServerScriptDir => syncback_lua_init(ScriptType::Server, snapshot),
             Middleware::ClientScriptDir => syncback_lua_init(ScriptType::Client, snapshot),
             Middleware::ModuleScriptDir => syncback_lua_init(ScriptType::Module, snapshot),
+            Middleware::JsonDir => anyhow::bail!("cannot syncback Json middleware"),
             Middleware::CsvDir => syncback_csv_init(snapshot),
 
             Middleware::PluginScript

@@ -75,6 +75,8 @@ pub fn snapshot_dir_no_meta(
         normalized_path.join("init.client.lua"),
         normalized_path.join("init.client.luau"),
         normalized_path.join("init.csv"),
+        normalized_path.join("init.json"),
+        normalized_path.join("init.jsonc"),
     ];
 
     let snapshot = InstanceSnapshot::new()
