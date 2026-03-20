@@ -7,6 +7,7 @@ use crate::{
     json,
     lua_ast::{Expression, Statement},
     snapshot::{InstanceContext, InstanceMetadata, InstanceSnapshot},
+    snapshot_middleware::dir::{dir_meta, snapshot_dir_no_meta},
 };
 
 use super::meta_file::AdjacentMetadata;
@@ -44,6 +45,38 @@ pub fn snapshot_json(
     }
 
     Ok(Some(snapshot))
+}
+
+pub fn snapshot_json_init(
+    context: &InstanceContext,
+    vfs: &Vfs,
+    init_path: &Path,
+) -> anyhow::Result<Option<InstanceSnapshot>> {
+    let folder_path = init_path.parent().unwrap();
+    let dir_snapshot = snapshot_dir_no_meta(context, vfs, folder_path)?.unwrap();
+
+    if dir_snapshot.class_name != "Folder" {
+        anyhow::bail!(
+            "init.json can \
+             only be used if the instance produced by the containing \
+             directory would be a Folder.\n\
+             \n\
+             The directory {} turned into an instance of class {}.",
+            folder_path.display(),
+            dir_snapshot.class_name
+        );
+    }
+
+    let mut init_snapshot = snapshot_json(context, vfs, init_path, &dir_snapshot.name)?.unwrap();
+
+    init_snapshot.children = dir_snapshot.children;
+    init_snapshot.metadata = dir_snapshot.metadata;
+
+    if let Some(mut meta) = dir_meta(vfs, folder_path)? {
+        meta.apply_all(&mut init_snapshot)?;
+    }
+
+    Ok(Some(init_snapshot))
 }
 
 fn json_to_lua(value: serde_json::Value) -> Statement {

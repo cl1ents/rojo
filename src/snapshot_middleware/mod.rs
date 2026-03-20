@@ -34,7 +34,7 @@ use crate::snapshot::{InstanceContext, InstanceSnapshot, SyncRule};
 use self::{
     csv::{snapshot_csv, snapshot_csv_init},
     dir::snapshot_dir,
-    json::snapshot_json,
+    json::{snapshot_json, snapshot_json_init},
     json_model::snapshot_json_model,
     lua::{snapshot_lua, snapshot_lua_init, ScriptType},
     project::snapshot_project,
@@ -88,6 +88,7 @@ pub fn snapshot_from_vfs(
                         Middleware::ClientScript => {
                             snapshot_lua_init(context, vfs, &init_path, ScriptType::Client)
                         }
+                        Middleware::Json => snapshot_json_init(context, vfs, &init_path),
 
                         Middleware::Csv => snapshot_csv_init(context, vfs, &init_path),
 
@@ -108,7 +109,9 @@ pub fn snapshot_from_vfs(
         // TODO: Is this even necessary anymore?
         match file_name {
             "init.server.luau" | "init.server.lua" | "init.client.luau" | "init.client.lua"
-            | "init.luau" | "init.lua" | "init.csv" => return Ok(None),
+            | "init.luau" | "init.lua" | "init.csv" | "init.json" | "init.jsonc" => {
+                return Ok(None)
+            }
             _ => {}
         }
 
@@ -158,6 +161,16 @@ fn get_init_path<P: AsRef<Path>>(vfs: &Vfs, dir: P) -> anyhow::Result<Option<Pat
     }
 
     let init_path = path.join("init.csv");
+    if vfs.metadata(&init_path).with_not_found()?.is_some() {
+        return Ok(Some(init_path));
+    }
+
+    let init_path = path.join("init.json");
+    if vfs.metadata(&init_path).with_not_found()?.is_some() {
+        return Ok(Some(init_path));
+    }
+
+    let init_path = path.join("init.jsonc");
     if vfs.metadata(&init_path).with_not_found()?.is_some() {
         return Ok(Some(init_path));
     }
